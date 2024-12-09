@@ -26,14 +26,24 @@ jobs:
       # matrix is very flexible and not always "obvious"
       # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflo
       matrix:
-        # Keep it simple and just build "ourselves"
+        # - img_distro/img_rel: keep it simple and just build "ourselves"
+        # - mkosi_ver: the goal is NOT to test a large range of mkosi versions.
+        #   Most of them fail in obscure ways. This is about testing run_qemu
+        #   and finding some mkosi versions good enough for that.
+        #   - This is about testing run_qemu, not mkosi
+        #   - This is only about catching major run_qemu regressions. This is not "validation", it's only CI
+        # mkosi on Ubuntu 24.04 is incredibly brittle: every mkosi version fails in a slightly different way.
+        # Generally speaking, mkosi developers don't seem to care about Ubuntu much - and vice versa.
+        # Patch v20 to catch accidentally introduced dependencies on newer mkosi versions
         cfg:
           - os: ubuntu-22.04
             img_distro: ubuntu
             img_rel: jammy
+            mkosi_ver: os_default
           - os: ubuntu-24.04
             img_distro: ubuntu
             img_rel: noble
+            mkosi_ver: v24.3
         arch: [x86_64]
         run_opts: [--cxl]
 
@@ -66,6 +76,21 @@ jobs:
         run: |
            # systemd was monolithic in Ubunutu 22
            sudo apt install -y systemd-ukify systemd-boot
+
+      - name: git clone mkosi
+        if: matrix.cfg.mkosi_ver  != 'os_default'
+        uses: actions/checkout@v4
+        with:
+          repository: systemd/mkosi
+          ref: ${{ matrix.cfg.mkosi_ver }}
+          path: mkosi
+
+      - name: mkosi switch
+        run: |
+          sudo dpkg --purge mkosi
+          # This is a throw-away container; don't do this at home.
+          # Try a couple symlinks instead, see corresponding mkosi/README.md
+          cd mkosi && sudo pip install --break-system-packages -e .
 
       # argbash. TODO: mixing generated code and sources in the same git
       # repo is generally a bad idea but this particular one changes
